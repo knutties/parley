@@ -97,13 +97,20 @@ export async function addComment(token, discussionId, body, replyToId = null) {
 
 // ------- GitHub Models -------
 
-// Fetch the live catalog of models available on GitHub Models. Response
-// shape from the public endpoint is defensive-parsed: GitHub has returned
-// either a flat array or { data: [...] } / { models: [...] } at various
-// points, and the per-item field names for the "what task does this model
-// do" attribute differ across publishers.
-export async function listModels(token) {
-  const r = await fetch("https://models.github.ai/catalog/models", {
+// Fetch the live catalog of models available on GitHub Models.
+//
+// The catalog endpoint does not return CORS headers, so the call from a
+// browser origin has to be relayed through the same Cloudflare Worker
+// that fronts the OAuth device-flow endpoints. When `proxy` is given,
+// the URL is rewritten to `<proxy><encoded target>`; when it isn't, we
+// attempt a direct fetch (works locally, fails in production).
+//
+// Response shape is defensive-parsed: GitHub has returned either a flat
+// array or { data: [...] } / { models: [...] } at various points.
+export async function listModels(token, proxy = null) {
+  const target = "https://models.github.ai/catalog/models";
+  const url = proxy ? proxy + encodeURIComponent(target) : target;
+  const r = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
