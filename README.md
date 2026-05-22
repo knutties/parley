@@ -65,7 +65,7 @@ Copy the **Client ID** (looks like `Iv1.…` or `Ov23li…`).
 ### 2. Configure `config.js`
 
 ```js
-window.DISCUSS_CHAT_CONFIG = {
+window.PARLEY_CONFIG = {
   clientId: "Iv1.YOUR_ID_HERE",
   defaultRepo: { owner: "yourname", name: "yourrepo" },
   // ... see file for the rest

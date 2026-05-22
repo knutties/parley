@@ -4,7 +4,7 @@ import * as gh from "./github.js";
 import * as auth from "./auth.js";
 import { renderMarkdown } from "./markdown.js";
 
-const cfg = window.DISCUSS_CHAT_CONFIG;
+const cfg = window.PARLEY_CONFIG;
 const $app = document.getElementById("app");
 
 const state = {
@@ -211,7 +211,7 @@ function renderRepoPicker() {
             const n = nameInput.value.trim();
             if (!o || !n) return;
             state.repo = { owner: o, name: n };
-            localStorage.setItem("discuss_chat_repo", JSON.stringify(state.repo));
+            localStorage.setItem("parley_repo", JSON.stringify(state.repo));
             bootRepo();
           },
         }, "Open"),
@@ -266,7 +266,7 @@ function renderMain() {
           class: "switch-repo",
           title: "Switch to a different repository",
           onclick: () => {
-            localStorage.removeItem("discuss_chat_repo");
+            localStorage.removeItem("parley_repo");
             state.repo = null; state.activeDiscussion = null; state.threads = [];
             render();
           },
@@ -741,7 +741,7 @@ async function invokeBot(textarea) {
       state.token = null;
     }
   }
-  const savedRepo = localStorage.getItem("discuss_chat_repo");
+  const savedRepo = localStorage.getItem("parley_repo");
   if (savedRepo) {
     try { state.repo = JSON.parse(savedRepo); } catch {}
   } else if (

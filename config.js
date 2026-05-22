@@ -14,7 +14,7 @@
 //   - read:discussion, write:discussion
 //   - models:read   (for GitHub Models inference)
 //
-window.DISCUSS_CHAT_CONFIG = {
+window.PARLEY_CONFIG = {
   clientId: "Ov23linIWX77Xvv3ytXu",
 
   // Default repo to load on startup. Leave null to prompt the user.
