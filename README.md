@@ -224,6 +224,20 @@ The URL where Pages serves the site must match the OAuth App's Homepage URL.
 7. Type `/parley-bot` (alone, or followed by a question) to summon the
    LLM, or click the small `/parley-bot` button next to the model picker
 
+### Deep links
+
+The URL hash mirrors GitHub's discussions path so links are recognisable
+and shareable:
+
+| URL fragment                                          | What it opens                                |
+|------------------------------------------------------|----------------------------------------------|
+| `#/<owner>/<repo>`                                    | The repo's thread list                       |
+| `#/<owner>/<repo>/discussions/<n>`                    | A specific discussion, loaded directly       |
+
+The hash is kept in sync as you navigate — picking a thread updates the
+URL, "Switch repo" clears it, and pasted URLs, reloads, and the browser
+back/forward buttons all do the right thing.
+
 ## How the bot works
 
 - Reads the full thread (discussion body + comments + nested replies)
