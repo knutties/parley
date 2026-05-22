@@ -20,7 +20,7 @@ window.DISCUSS_CHAT_CONFIG = {
   // Default repo to load on startup. Leave null to prompt the user.
   defaultRepo: {
     owner: "knutties",
-    name: "test-chat",
+    name: "parley",
   },
 
   // GitHub Models inference endpoint (rarely needs changing).
