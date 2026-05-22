@@ -268,6 +268,7 @@ function renderRepoPicker() {
             const o = ownerInput.value.trim();
             const n = nameInput.value.trim();
             if (!o || !n) return;
+            resetRepoScopedState();
             state.repo = { owner: o, name: n };
             localStorage.setItem("parley_repo", JSON.stringify(state.repo));
             syncHashFromState();
@@ -334,11 +335,8 @@ function renderMain() {
           title: "Switch to a different repository",
           onclick: () => {
             localStorage.removeItem("parley_repo");
+            resetRepoScopedState();
             state.repo = null;
-            state.activeDiscussion = null;
-            state.activeNumber = null;
-            state.threads = [];
-            stopPolling();
             syncHashFromState();
             render();
           },
@@ -619,6 +617,37 @@ async function sendReply(parentCommentId, body) {
 }
 
 // ---------- Boot/data ----------
+//
+// Async-race guards: a fetch started against one repo/discussion can
+// finish AFTER the user has navigated away (e.g. clicked "Switch repo",
+// pasted a new URL, opened a different thread). Every async fetch
+// captures the (owner, name[, number]) it was issued for and checks on
+// response whether the user is still on that same view before applying
+// the result. Stale responses are silently dropped.
+
+function isCurrentRepo(owner, name) {
+  return state.repo?.owner === owner && state.repo?.name === name;
+}
+function isCurrentDiscussion(owner, name, number) {
+  return isCurrentRepo(owner, name) && state.activeNumber === number;
+}
+
+// Wipe every piece of in-memory state that was scoped to the previous
+// repo, so a Switch repo / hash navigation / repo-picker submit starts
+// with a clean slate. The in-flight fetches that target the old repo
+// will still resolve, but the isCurrentRepo / isCurrentDiscussion
+// guards in their callbacks will drop the results.
+function resetRepoScopedState() {
+  stopPolling();
+  state.activeDiscussion = null;
+  state.activeNumber = null;
+  state.threads = [];
+  state.repoId = null;
+  state.seenCommentIds = new Set();
+  state.replyingToId = null;
+  state.replyDrafts = new Map();
+}
+
 async function bootRepo() {
   try {
     await refreshThreads();
@@ -628,10 +657,10 @@ async function bootRepo() {
 }
 
 async function refreshThreads() {
+  const { owner, name } = state.repo;
   try {
-    const { repoId, discussions } = await gh.listDiscussions(
-      state.token, state.repo.owner, state.repo.name, 30
-    );
+    const { repoId, discussions } = await gh.listDiscussions(state.token, owner, name, 30);
+    if (!isCurrentRepo(owner, name)) return; // user navigated away
     state.repoId = repoId;
     state.threads = discussions;
     render();
@@ -643,6 +672,7 @@ async function refreshThreads() {
       render();
       return;
     }
+    if (!isCurrentRepo(owner, name)) return;
     throw e;
   }
 }
@@ -654,13 +684,16 @@ async function loadDiscussion(number) {
   state.seenCommentIds = new Set();
   syncHashFromState();
   render();
+  const { owner, name } = state.repo;
   try {
-    const d = await gh.getDiscussion(state.token, state.repo.owner, state.repo.name, number);
+    const d = await gh.getDiscussion(state.token, owner, name, number);
+    if (!isCurrentDiscussion(owner, name, number)) return;
     state.activeDiscussion = d;
     cacheSeen(d);
     render();
     startPolling();
   } catch (e) {
+    if (!isCurrentDiscussion(owner, name, number)) return;
     alert("Failed to load discussion: " + e.message);
   }
 }
@@ -676,9 +709,12 @@ function cacheSeen(d) {
 function startPolling() {
   stopPolling();
   state.pollTimer = setInterval(async () => {
-    if (!state.activeNumber) return;
+    if (!state.activeNumber || !state.repo) return;
+    const { owner, name } = state.repo;
+    const number = state.activeNumber;
     try {
-      const d = await gh.getDiscussion(state.token, state.repo.owner, state.repo.name, state.activeNumber);
+      const d = await gh.getDiscussion(state.token, owner, name, number);
+      if (!isCurrentDiscussion(owner, name, number)) return;
       const before = state.seenCommentIds.size;
       cacheSeen(d);
       const grew = state.seenCommentIds.size > before;
@@ -734,8 +770,11 @@ async function handleSend(textarea) {
 }
 
 async function refreshDiscussion() {
-  if (!state.activeNumber) return;
-  const d = await gh.getDiscussion(state.token, state.repo.owner, state.repo.name, state.activeNumber);
+  if (!state.activeNumber || !state.repo) return;
+  const { owner, name } = state.repo;
+  const number = state.activeNumber;
+  const d = await gh.getDiscussion(state.token, owner, name, number);
+  if (!isCurrentDiscussion(owner, name, number)) return;
   state.activeDiscussion = d;
   cacheSeen(d);
   render();
@@ -860,12 +899,9 @@ async function applyHashRoute() {
     state.repo.owner !== route.owner ||
     state.repo.name !== route.name;
   if (repoChanged) {
+    resetRepoScopedState();
     state.repo = { owner: route.owner, name: route.name };
     localStorage.setItem("parley_repo", JSON.stringify(state.repo));
-    state.activeDiscussion = null;
-    state.activeNumber = null;
-    state.threads = [];
-    stopPolling();
     render();
     if (state.token) {
       try { await bootRepo(); } catch (e) { console.warn("bootRepo failed", e); }
