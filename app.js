@@ -225,7 +225,10 @@ async function beginDeviceFlow(card) {
     state.viewer = await gh.getViewer(token);
     render();
     loadModels();
-    bootRepo();
+    if (state.repo) {
+      await bootRepo();
+      if (state.activeNumber) loadDiscussion(state.activeNumber);
+    }
   } catch (e) {
     card.innerHTML = "";
     card.appendChild(el("h1", {}, "Sign-in failed"));
@@ -266,6 +269,7 @@ function renderRepoPicker() {
             if (!o || !n) return;
             state.repo = { owner: o, name: n };
             localStorage.setItem("parley_repo", JSON.stringify(state.repo));
+            syncHashFromState();
             bootRepo();
           },
         }, "Open"),
@@ -321,7 +325,12 @@ function renderMain() {
           title: "Switch to a different repository",
           onclick: () => {
             localStorage.removeItem("parley_repo");
-            state.repo = null; state.activeDiscussion = null; state.threads = [];
+            state.repo = null;
+            state.activeDiscussion = null;
+            state.activeNumber = null;
+            state.threads = [];
+            stopPolling();
+            syncHashFromState();
             render();
           },
         }, "Switch repo")
@@ -634,6 +643,7 @@ async function loadDiscussion(number) {
   state.activeNumber = number;
   state.activeDiscussion = null;
   state.seenCommentIds = new Set();
+  syncHashFromState();
   render();
   try {
     const d = await gh.getDiscussion(state.token, state.repo.owner, state.repo.name, number);
@@ -782,6 +792,93 @@ async function invokeBot(textarea) {
   }
 }
 
+// ---------- URL routing ----------
+//
+// Mirror GitHub's path structure in our hash so links are recognisable
+// and shareable:
+//   #/<owner>/<repo>                            -> repo view
+//   #/<owner>/<repo>/discussions/<n>            -> specific discussion
+//
+// Hash-based because GitHub Pages can't SPA-fallback unknown paths
+// without a 404.html hack, and the hash route survives reload, copy/
+// paste, and back/forward.
+
+function parseHash() {
+  const raw = window.location.hash.slice(1);
+  if (!raw) return null;
+  const path = raw.startsWith("/") ? raw.slice(1) : raw;
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+  const [owner, name, ...rest] = parts;
+  let number = null;
+  if (rest.length === 2 && rest[0] === "discussions" && /^\d+$/.test(rest[1])) {
+    number = Number(rest[1]);
+  }
+  return { owner, name, number };
+}
+
+function buildHash(repo, number) {
+  if (!repo) return "";
+  return number
+    ? `#/${repo.owner}/${repo.name}/discussions/${number}`
+    : `#/${repo.owner}/${repo.name}`;
+}
+
+function syncHashFromState() {
+  const desired = buildHash(state.repo, state.activeNumber);
+  if (window.location.hash === desired) return;
+  if (desired) {
+    history.replaceState(null, "", desired);
+  } else {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+}
+
+async function applyHashRoute() {
+  const route = parseHash();
+  if (!route) {
+    // Hash was cleared — drop any active discussion but keep the repo.
+    if (state.activeNumber) {
+      stopPolling();
+      state.activeNumber = null;
+      state.activeDiscussion = null;
+      render();
+    }
+    return;
+  }
+  const repoChanged =
+    !state.repo ||
+    state.repo.owner !== route.owner ||
+    state.repo.name !== route.name;
+  if (repoChanged) {
+    state.repo = { owner: route.owner, name: route.name };
+    localStorage.setItem("parley_repo", JSON.stringify(state.repo));
+    state.activeDiscussion = null;
+    state.activeNumber = null;
+    state.threads = [];
+    stopPolling();
+    render();
+    if (state.token) {
+      try { await bootRepo(); } catch (e) { console.warn("bootRepo failed", e); }
+    }
+  }
+  if (route.number && route.number !== state.activeNumber) {
+    if (state.token && state.repo) {
+      loadDiscussion(route.number);
+    } else {
+      // Park the number on state; sign-in flow will pick it up.
+      state.activeNumber = route.number;
+    }
+  } else if (!route.number && state.activeNumber) {
+    stopPolling();
+    state.activeNumber = null;
+    state.activeDiscussion = null;
+    render();
+  }
+}
+
+window.addEventListener("hashchange", applyHashRoute);
+
 // ---------- Init ----------
 (async function init() {
   try { applyTheme(localStorage.getItem("parley_theme") || "terracotta"); } catch { applyTheme("terracotta"); }
@@ -795,16 +892,27 @@ async function invokeBot(textarea) {
       state.token = null;
     }
   }
-  const savedRepo = localStorage.getItem("parley_repo");
-  if (savedRepo) {
-    try { state.repo = JSON.parse(savedRepo); } catch {}
-  } else if (
-    cfg.defaultRepo &&
-    cfg.defaultRepo.owner !== "YOUR_GITHUB_USERNAME"
-  ) {
-    state.repo = { ...cfg.defaultRepo };
+  // Routing precedence: URL hash > saved repo in localStorage > cfg.defaultRepo.
+  const fromHash = parseHash();
+  if (fromHash) {
+    state.repo = { owner: fromHash.owner, name: fromHash.name };
+    state.activeNumber = fromHash.number || null;
+  } else {
+    const savedRepo = localStorage.getItem("parley_repo");
+    if (savedRepo) {
+      try { state.repo = JSON.parse(savedRepo); } catch {}
+    } else if (
+      cfg.defaultRepo &&
+      cfg.defaultRepo.owner !== "YOUR_GITHUB_USERNAME"
+    ) {
+      state.repo = { ...cfg.defaultRepo };
+    }
+    syncHashFromState();
   }
   render();
   if (state.token) loadModels();
-  if (state.token && state.repo) bootRepo();
+  if (state.token && state.repo) {
+    await bootRepo();
+    if (state.activeNumber) loadDiscussion(state.activeNumber);
+  }
 })();
