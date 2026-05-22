@@ -183,9 +183,10 @@ function renderAuth() {
 
   const card = el("div", { class: "card" },
     el("h1", { class: "wordmark" }, parleyMark(28), "parley"),
-    el("p", { class: "lede" },
-      "A chat interface over GitHub Discussions. Sign in with GitHub to begin."
+    el("p", { class: "wordmark-tagline" },
+      cfg.tagline || "github discussions as a group chat"
     ),
+    el("p", { class: "lede" }, "Sign in with GitHub to begin."),
     el("button", {
       class: "primary",
       onclick: () => beginDeviceFlow(card),
@@ -305,10 +306,18 @@ function renderMain() {
 
   $app.appendChild(
     el("header", { class: "topbar" },
-      el("div", { class: "brand" },
-        parleyMark(18),
-        el("span", { class: "brand-name" }, "parley"),
-        el("span", { class: "tag" }, "GitHub Models")
+      el("a", {
+        class: "brand",
+        href: cfg.sourceUrl || "https://github.com/knutties/parley",
+        target: "_blank",
+        rel: "noopener",
+        title: "View parley source on GitHub",
+      },
+        parleyMark(20),
+        el("div", { class: "brand-text" },
+          el("span", { class: "brand-name" }, "parley"),
+          el("span", { class: "brand-tagline" }, cfg.tagline || "github discussions as a group chat")
+        )
       ),
       el("div", { class: "repo-crumbs" },
         el("a", {
