@@ -15,7 +15,7 @@ const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
 function proxied(url) {
-  const proxy = window.DISCUSS_CHAT_CONFIG.corsProxy || DEFAULT_PROXY;
+  const proxy = window.PARLEY_CONFIG.corsProxy || DEFAULT_PROXY;
   return proxy + encodeURIComponent(url);
 }
 
@@ -57,7 +57,7 @@ export async function pollForToken(clientId, deviceCode, interval, onTick) {
   throw new Error("Timed out waiting for authorization.");
 }
 
-const TOKEN_KEY = "discuss_chat_gh_token";
+const TOKEN_KEY = "parley_gh_token";
 
 export function saveToken(t) { localStorage.setItem(TOKEN_KEY, t); }
 export function loadToken() { return localStorage.getItem(TOKEN_KEY); }
