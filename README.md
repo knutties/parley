@@ -174,21 +174,14 @@ If the repo doesn't have Discussions on:
 
 ### 5. Deploy to GitHub Pages
 
-The static site lives in `src/`. Two ways to publish it:
+All the static files live at the repo root, so Pages can serve them
+directly with no workflow. Two common patterns:
 
-- **From `src/` via GitHub Actions** (recommended for this layout):
-  set Pages source to **GitHub Actions** and use a workflow that uploads
-  the `src/` directory as the Pages artifact. The
-  `actions/upload-pages-artifact` action takes a `path: ./src` input.
-- **From a `gh-pages` branch**: build (or copy) `src/*` to the root of a
-  `gh-pages` branch and point Pages there.
+- **Repo root:** enable Pages on `main → / (root)`.
+- **`/docs` folder:** move the files into `docs/` and enable Pages on
+  `main → /docs` instead.
 
-If you prefer to skip Actions entirely, you can rename `src/` to `docs/`
-and point Pages at `main → /docs` — GitHub Pages serves `/docs` directly
-from any branch.
-
-Whichever route you pick, the URL Pages serves the site at must match the
-OAuth App's Homepage URL.
+The URL where Pages serves the site must match the OAuth App's Homepage URL.
 
 ## Using it
 
@@ -308,18 +301,16 @@ will simply all be `user` role in the prompt.
 ## Files
 
 ```
-src/
-  index.html      — entry point
-  styles.css      — single stylesheet
-  config.js       — user-edited configuration
-  app.js          — view orchestration + state
-  github.js       — GraphQL + Models API calls
-  auth.js         — OAuth device flow
-  markdown.js     — minimal markdown renderer
+index.html      — entry point
+styles.css      — single stylesheet
+config.js       — user-edited configuration
+app.js          — view orchestration + state
+github.js       — GraphQL + Models API calls
+auth.js         — OAuth device flow
+markdown.js     — minimal markdown renderer
 ```
 
-No build step. No `node_modules`. No bundler. Static files only — Pages
-just serves the contents of `src/`.
+No build step. No `node_modules`. No bundler. Static files only.
 
 ## License
 
