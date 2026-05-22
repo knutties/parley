@@ -21,7 +21,21 @@ const state = {
   seenCommentIds: new Set(),
   replyingToId: null,            // id of comment whose inline reply composer is open
   replyDrafts: new Map(),        // commentId -> draft text (survives polling re-renders)
+  theme: "terracotta",            // active palette: terracotta | slack | discord
 };
+
+const THEMES = [
+  { id: "terracotta", label: "Terracotta dark" },
+  { id: "slack",      label: "Slack light"      },
+  { id: "discord",    label: "Discord dark"     },
+];
+
+function applyTheme(id) {
+  const known = THEMES.some((t) => t.id === id) ? id : "terracotta";
+  state.theme = known;
+  document.body.setAttribute("data-theme", known);
+  try { localStorage.setItem("parley_theme", known); } catch {}
+}
 
 // Marker embedded in bot replies so we can recognize them even when posted
 // through a human's OAuth token (which makes the comment look like a normal
@@ -241,6 +255,13 @@ function renderMain() {
           },
         }, "Switch repo")
       ),
+      el("select", {
+        class: "theme-picker",
+        title: "Theme",
+        onchange: (e) => { applyTheme(e.target.value); },
+      }, ...THEMES.map((t) =>
+        el("option", { value: t.id, selected: t.id === state.theme ? "selected" : null }, t.label)
+      )),
       el("div", { class: "user-chip" },
         state.viewer?.avatarUrl && el("img", { src: state.viewer.avatarUrl }),
         state.viewer?.login,
@@ -250,7 +271,50 @@ function renderMain() {
       )
     )
   );
-  $app.appendChild(el("main", { class: "layout" }, sidebar, chatPanel));
+  const layoutClass = "layout" + (state.activeDiscussion ? " with-participants" : "");
+  const participants = state.activeDiscussion ? renderParticipants(state.activeDiscussion) : null;
+  $app.appendChild(el("main", { class: layoutClass }, sidebar, chatPanel, participants));
+}
+
+function renderParticipants(d) {
+  const map = new Map();   // login -> { author, count }
+  const tally = (a) => {
+    if (!a || !a.login) return;
+    const cur = map.get(a.login) || { author: a, count: 0 };
+    cur.count += 1;
+    map.set(a.login, cur);
+  };
+  tally(d.author);
+  for (const c of d.comments.nodes) {
+    tally(c.author);
+    for (const r of c.replies.nodes) tally(r.author);
+  }
+  const rows = [...map.values()].sort((a, b) => b.count - a.count);
+
+  return el("aside", { class: "participants" },
+    el("div", { class: "participants-header" },
+      el("span", {}, "participants"),
+      el("span", { class: "count" }, String(rows.length))
+    ),
+    ...rows.map((p) => {
+      const isBot = isBotAuthor(p.author?.login);
+      const isMe = p.author?.login === state.viewer?.login;
+      const cls = "participant" + (isBot ? " bot" : "") + (isMe ? " me" : "");
+      return el("a", {
+        class: cls,
+        href: `https://github.com/${p.author.login}`,
+        target: "_blank",
+        rel: "noopener",
+        title: `${p.author.login} · ${p.count} message${p.count === 1 ? "" : "s"}`,
+      },
+        el("div", { class: "avatar" },
+          p.author?.avatarUrl ? el("img", { src: p.author.avatarUrl }) : null
+        ),
+        el("div", { class: "login" }, p.author.login),
+        el("div", { class: "count" }, String(p.count))
+      );
+    })
+  );
 }
 
 function renderThreadItem(t) {
@@ -304,7 +368,7 @@ function renderChatPanel() {
   setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 0);
 
   const textarea = el("textarea", {
-    placeholder: `Reply to #${d.number}…  (use ${cfg.botTrigger} to summon the bot)`,
+    placeholder: `Reply to #${d.number}…  ·  /bot to summon  ·  Cmd/Ctrl+Enter`,
     onkeydown: (e) => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -321,13 +385,19 @@ function renderChatPanel() {
 
   return el("section", { class: "chat" },
     el("div", { class: "chat-header" },
-      el("div", { class: "title" }, d.title),
+      el("div", { class: "title" },
+        el("a", {
+          href: d.url,
+          target: "_blank",
+          rel: "noopener",
+          title: "Open this discussion on github.com",
+        }, d.title, el("span", { class: "open-icon" }, " ↗"))
+      ),
       el("div", { class: "sub" },
         el("span", {}, `#${d.number}`),
         d.category && el("span", {}, `${d.category.emoji || ""} ${d.category.name}`),
         el("span", {}, `opened by ${d.author?.login || "anon"}`),
-        el("span", {}, timeAgo(d.createdAt) + " ago"),
-        el("a", { href: d.url, target: "_blank" }, "view on github →")
+        el("span", {}, timeAgo(d.createdAt) + " ago")
       )
     ),
     messagesEl,
@@ -343,9 +413,10 @@ function renderChatPanel() {
             modelSelect,
             el("button", {
               class: "bot",
+              title: "Summon the bot to reply (same as typing /bot)",
               disabled: state.postingBot ? "disabled" : null,
               onclick: () => invokeBot(textarea),
-            }, state.postingBot ? "…" : "ask bot"),
+            }, state.postingBot ? "…" : "/bot"),
             el("button", {
               class: "send",
               onclick: () => handleSend(textarea),
@@ -536,18 +607,38 @@ function stopPolling() {
 
 // ---------- Sending ----------
 async function handleSend(textarea) {
-  const body = textarea.value.trim();
-  if (!body || !state.activeDiscussion) return;
+  const raw = textarea.value.trim();
+  if (!raw || !state.activeDiscussion) return;
+
+  // /bot slash command: either bare "/bot" (summon without posting), or
+  // "/bot <something>" (post <something> as a user comment, then summon).
+  const slashMatch = raw.match(/^\/bot\b\s*([\s\S]*)$/i);
+  if (slashMatch) {
+    const remainder = slashMatch[1].trim();
+    textarea.value = "";
+    try {
+      if (remainder) {
+        await gh.addComment(state.token, state.activeDiscussion.id, remainder);
+        await refreshDiscussion();
+      }
+      await invokeBot(textarea);
+    } catch (e) {
+      alert("Failed to summon bot: " + e.message);
+      textarea.value = raw;
+    }
+    return;
+  }
+
   textarea.value = "";
   try {
-    await gh.addComment(state.token, state.activeDiscussion.id, body);
+    await gh.addComment(state.token, state.activeDiscussion.id, raw);
     // Trigger if the user mentioned the bot in their message.
-    const triggered = body.toLowerCase().includes(cfg.botTrigger.toLowerCase());
+    const triggered = raw.toLowerCase().includes(cfg.botTrigger.toLowerCase());
     await refreshDiscussion();
     if (triggered) invokeBot(textarea, /*autoTriggered=*/true);
   } catch (e) {
     alert("Failed to post: " + e.message);
-    textarea.value = body;
+    textarea.value = raw;
   }
 }
 
@@ -600,14 +691,13 @@ async function invokeBot(textarea) {
     );
     if (!text) throw new Error("Empty response from model.");
     // Bot replies are posted via the signed-in user's OAuth token, so the
-    // comment shows up under their name and avatar. Lead with a visible
-    // header so readers (here and on github.com) can tell it apart from
-    // a real human reply. The HTML comment marker lets us detect bot
-    // messages programmatically for styling and role-mapping.
+    // comment shows up under their name and avatar. Lead with a one-line
+    // "parley-bot" callout so readers (here and on github.com) can tell it
+    // apart from a real human reply. The HTML comment marker lets us detect
+    // bot messages programmatically for styling and role-mapping even when
+    // the author login is a regular human's.
     const author = state.viewer?.login || "the signed-in user";
-    const header =
-      `> **Bot reply** — model \`${state.selectedModel}\`  \n` +
-      `> _Generated by parley and posted via @${author}'s GitHub account._\n\n`;
+    const header = `**parley-bot** · \`${state.selectedModel}\` · via @${author}\n\n`;
     const marker = `\n\n<!-- parley:bot model=${state.selectedModel} -->`;
     const tagged = header + text + marker;
     await gh.addComment(state.token, state.activeDiscussion.id, tagged);
@@ -622,6 +712,7 @@ async function invokeBot(textarea) {
 
 // ---------- Init ----------
 (async function init() {
+  try { applyTheme(localStorage.getItem("parley_theme") || "terracotta"); } catch { applyTheme("terracotta"); }
   const t = auth.loadToken();
   if (t) {
     state.token = t;
