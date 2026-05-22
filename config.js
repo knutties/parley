@@ -53,4 +53,7 @@ window.DISCUSS_CHAT_CONFIG = {
   // (case-insensitive) in a posted comment will queue a bot response.
   // Use "@bot" or whatever feels natural in your community.
   botTrigger: "@test-chat-bot",
+
+  corsProxy: "https://my-first-worker.knutties.workers.dev/?url=",
+
 };
