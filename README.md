@@ -218,6 +218,27 @@ The URL where Pages serves the site must match the OAuth App's Homepage URL.
 Inference is billed against the signed-in user's GitHub Models quota. The
 free tier covers casual use comfortably.
 
+### Model picker
+
+By default the model dropdown is populated from the live GitHub Models
+catalog at `https://models.github.ai/catalog/models`, fetched once at
+boot using the signed-in user's token. The static `config.models` array
+is used as a fallback when the fetch fails (offline, rate-limited,
+unauthenticated, etc.) and to seed the picker on first paint.
+
+Use `config.modelFilter` to scope the live catalog to a short curated
+list — it's a case-insensitive substring allowlist applied to each
+model's `id`. Leave it empty to show every chat-completion model in the
+catalog. Set `config.useLiveModels = false` to skip the fetch entirely
+and use the static list verbatim.
+
+You can preview the raw catalog by running:
+
+```bash
+curl -H "Authorization: Bearer $GH_TOKEN" \
+     https://models.github.ai/catalog/models | jq '.[].id'
+```
+
 ## OAuth scopes
 
 The app requests just one scope: **`repo`**.

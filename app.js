@@ -22,6 +22,7 @@ const state = {
   replyingToId: null,            // id of comment whose inline reply composer is open
   replyDrafts: new Map(),        // commentId -> draft text (survives polling re-renders)
   theme: "terracotta",            // active palette: terracotta | slack | discord
+  models: (cfg.models || []).slice(), // populated from the live catalog at boot, falls back to cfg.models
 };
 
 const THEMES = [
@@ -35,6 +36,58 @@ function applyTheme(id) {
   state.theme = known;
   document.body.setAttribute("data-theme", known);
   try { localStorage.setItem("parley_theme", known); } catch {}
+}
+
+// Best-effort heuristic for "is this a chat-completion model?" The
+// catalog has used different field names over time (`task`,
+// `capabilities`, `tags`, `supported_input_modalities`), so we look at
+// all of them.
+function isChatModel(m) {
+  const probe = [
+    m.task,
+    ...(Array.isArray(m.capabilities) ? m.capabilities : []),
+    ...(Array.isArray(m.tags) ? m.tags : []),
+    ...(Array.isArray(m.supported_input_modalities) ? m.supported_input_modalities : []),
+  ].filter(Boolean).map(String).map((s) => s.toLowerCase());
+  if (probe.length === 0) return true; // unknown shape → assume usable
+  return probe.some((s) => s.includes("chat"));
+}
+
+// Apply the user's optional substring allowlist from cfg.modelFilter.
+function passesFilter(id) {
+  const filters = cfg.modelFilter || [];
+  if (filters.length === 0) return true;
+  const lower = id.toLowerCase();
+  return filters.some((p) => lower.includes(String(p).toLowerCase()));
+}
+
+// Pull the human label out of whichever field the catalog uses.
+function labelFor(m) {
+  return m.friendly_name || m.display_name || m.name || m.id;
+}
+
+async function loadModels() {
+  if (!cfg.useLiveModels || !state.token) return;
+  try {
+    const catalog = await gh.listModels(state.token);
+    const picked = catalog
+      .filter((m) => m && m.id)
+      .filter(isChatModel)
+      .filter((m) => passesFilter(m.id))
+      .map((m) => ({ id: m.id, label: labelFor(m) }));
+    if (picked.length === 0) {
+      console.warn("Catalog returned no models after filtering; keeping fallback.");
+      return;
+    }
+    state.models = picked;
+    // If the saved default isn't in the live list, fall back to the first.
+    if (!picked.some((m) => m.id === state.selectedModel)) {
+      state.selectedModel = picked[0].id;
+    }
+    render();
+  } catch (e) {
+    console.warn("Live model catalog fetch failed; using cfg.models.", e);
+  }
 }
 
 // Marker embedded in bot replies so we can recognize them even when posted
@@ -171,6 +224,7 @@ async function beginDeviceFlow(card) {
     state.token = token;
     state.viewer = await gh.getViewer(token);
     render();
+    loadModels();
     bootRepo();
   } catch (e) {
     card.innerHTML = "";
@@ -396,7 +450,7 @@ function renderChatPanel() {
 
   const modelSelect = el("select", {
     onchange: (e) => { state.selectedModel = e.target.value; },
-  }, ...cfg.models.map((m) =>
+  }, ...state.models.map((m) =>
     el("option", { value: m.id, selected: m.id === state.selectedModel ? "selected" : null }, m.label)
   ));
 
@@ -751,5 +805,6 @@ async function invokeBot(textarea) {
     state.repo = { ...cfg.defaultRepo };
   }
   render();
+  if (state.token) loadModels();
   if (state.token && state.repo) bootRepo();
 })();

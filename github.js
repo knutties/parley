@@ -96,6 +96,28 @@ export async function addComment(token, discussionId, body, replyToId = null) {
 }
 
 // ------- GitHub Models -------
+
+// Fetch the live catalog of models available on GitHub Models. Response
+// shape from the public endpoint is defensive-parsed: GitHub has returned
+// either a flat array or { data: [...] } / { models: [...] } at various
+// points, and the per-item field names for the "what task does this model
+// do" attribute differ across publishers.
+export async function listModels(token) {
+  const r = await fetch("https://models.github.ai/catalog/models", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Catalog fetch failed (${r.status}): ${txt.slice(0, 200)}`);
+  }
+  const json = await r.json();
+  const list = Array.isArray(json) ? json : (json.data || json.models || []);
+  return list;
+}
+
 export async function chatCompletion(token, endpoint, model, messages, signal) {
   const r = await fetch(endpoint, {
     method: "POST",
