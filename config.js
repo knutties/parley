@@ -15,12 +15,12 @@
 //   - models:read   (for GitHub Models inference)
 //
 window.DISCUSS_CHAT_CONFIG = {
-  clientId: "YOUR_OAUTH_CLIENT_ID_HERE",
+  clientId: "Iv23liY5kVNa6YqsnKrK",
 
   // Default repo to load on startup. Leave null to prompt the user.
   defaultRepo: {
-    owner: "YOUR_GITHUB_USERNAME",
-    name: "YOUR_REPO_NAME",
+    owner: "knutties",
+    name: "test-chat",
   },
 
   // GitHub Models inference endpoint (rarely needs changing).
@@ -52,5 +52,5 @@ window.DISCUSS_CHAT_CONFIG = {
   // Trigger phrase that invokes the bot. Anything mentioning this string
   // (case-insensitive) in a posted comment will queue a bot response.
   // Use "@bot" or whatever feels natural in your community.
-  botTrigger: "@bot",
+  botTrigger: "@test-chat-bot",
 };
