@@ -9,7 +9,7 @@
 // 20-line Cloudflare Worker as the CORS proxy is the cleanest setup.
 
 const DEFAULT_PROXY = "https://cors.lol/?url=";
-const SCOPES = "repo,read:discussion,write:discussion,models:read";
+const SCOPES = "repo models:read";
 
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";

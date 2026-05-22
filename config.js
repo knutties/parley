@@ -15,7 +15,7 @@
 //   - models:read   (for GitHub Models inference)
 //
 window.DISCUSS_CHAT_CONFIG = {
-  clientId: "Iv23liY5kVNa6YqsnKrK",
+  clientId: "Ov23linIWX77Xvv3ytXu",
 
   // Default repo to load on startup. Leave null to prompt the user.
   defaultRepo: {
