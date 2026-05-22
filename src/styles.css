@@ -76,10 +76,27 @@ header.topbar {
   font-family: var(--mono);
   font-size: 13px;
   color: var(--fg-dim);
+  display: flex;
+  align-items: center;
 }
 .repo-crumbs a { color: var(--fg); text-decoration: none; border-bottom: 1px dotted var(--fg-faint); }
 .repo-crumbs a:hover { color: var(--accent); border-color: var(--accent); }
 .repo-crumbs .sep { color: var(--fg-faint); margin: 0 6px; }
+.repo-crumbs .switch-repo {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  margin-left: 14px;
+  cursor: pointer;
+  transition: background 100ms, color 100ms;
+}
+.repo-crumbs .switch-repo:hover { background: var(--accent); color: var(--bg); }
 
 .user-chip {
   display: flex;
@@ -306,6 +323,88 @@ section.chat {
 
 /* Nested reply indent */
 .msg.reply { margin-left: 28px; padding-left: 14px; border-left: 1px solid var(--rule); }
+
+/* "reply" affordance shown inline in the head of top-level comments */
+.msg .head .reply-link {
+  background: transparent;
+  border: none;
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  padding: 1px 4px;
+  margin-left: auto;
+}
+.msg .head { align-items: center; }
+.msg .head .reply-link:hover { color: var(--accent); }
+
+/* Inline reply composer that appears below a comment */
+.reply-composer {
+  margin-left: 42px;
+  margin-top: -10px;
+  margin-bottom: 4px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent);
+  background: var(--bg-elev);
+  max-width: var(--maxw);
+}
+.reply-composer textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--rule);
+  color: var(--fg);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 56px;
+  max-height: 200px;
+  outline: none;
+}
+.reply-composer textarea:focus { border-color: var(--rule-strong); }
+.reply-composer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg-faint);
+}
+.reply-composer-row .hint kbd {
+  font-family: var(--mono);
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  padding: 1px 4px;
+  font-size: 9px;
+  color: var(--fg-dim);
+}
+.reply-composer-actions { display: flex; gap: 6px; }
+.reply-composer-actions button {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.reply-composer-actions button.send {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+}
+.reply-composer-actions button.send:hover { background: #e8896a; }
+.reply-composer-actions button.ghost {
+  background: transparent;
+  border-color: var(--rule);
+  color: var(--fg-dim);
+}
+.reply-composer-actions button.ghost:hover { color: var(--fg); border-color: var(--rule-strong); }
 
 /* Bot pending bubble */
 .msg.pending .body { color: var(--fg-dim); font-style: italic; }

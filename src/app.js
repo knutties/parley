@@ -19,7 +19,14 @@ const state = {
   selectedModel: cfg.defaultModel,
   postingBot: false,
   seenCommentIds: new Set(),
+  replyingToId: null,            // id of comment whose inline reply composer is open
+  replyDrafts: new Map(),        // commentId -> draft text (survives polling re-renders)
 };
+
+// Marker embedded in bot replies so we can recognize them even when posted
+// through a human's OAuth token (which makes the comment look like a normal
+// user comment on GitHub's side).
+const BOT_MARKER = "<!-- parley:bot";
 
 // ---------- Utility ----------
 function el(tag, attrs = {}, ...children) {
@@ -54,6 +61,15 @@ function isBotAuthor(login) {
   return login.toLowerCase().endsWith("[bot]") ||
     login.toLowerCase().includes("bot") && state.viewer?.login === login;
   // Simple heuristic — anything with "bot" in the name; users can adjust.
+}
+
+// A message is "from the bot" if either the author looks like a bot OR the
+// body carries the BOT_MARKER (which it does when parley posts an LLM reply
+// via the signed-in user's OAuth token).
+function isBotMessage(m) {
+  if (isBotAuthor(m?.author?.login)) return true;
+  if (m?.body && m.body.includes(BOT_MARKER)) return true;
+  return false;
 }
 
 // ---------- Top-level render ----------
@@ -215,16 +231,15 @@ function renderMain() {
           href: `https://github.com/${state.repo.owner}/${state.repo.name}/discussions`,
           target: "_blank",
         }, state.repo.name),
-        el("span", { class: "sep" }, "·"),
-        el("a", {
-          href: "#",
-          onclick: (e) => {
-            e.preventDefault();
+        el("button", {
+          class: "switch-repo",
+          title: "Switch to a different repository",
+          onclick: () => {
             localStorage.removeItem("discuss_chat_repo");
             state.repo = null; state.activeDiscussion = null; state.threads = [];
             render();
           },
-        }, "change")
+        }, "Switch repo")
       ),
       el("div", { class: "user-chip" },
         state.viewer?.avatarUrl && el("img", { src: state.viewer.avatarUrl }),
@@ -257,27 +272,33 @@ function renderThreadItem(t) {
 function renderChatPanel() {
   const d = state.activeDiscussion;
 
-  // Flatten comments + replies into chat order
-  const flat = [];
+  const messagesEl = el("div", { class: "messages" });
+
   // Discussion body is the first message (from the OP)
-  flat.push({
+  messagesEl.appendChild(renderMessage({
     id: "body:" + d.id,
     author: d.author,
     bodyHTML: d.bodyHTML,
     body: d.body,
     createdAt: d.createdAt,
     isBody: true,
-  });
+  }));
+
   for (const c of d.comments.nodes) {
-    flat.push({ id: c.id, author: c.author, bodyHTML: c.bodyHTML, body: c.body, createdAt: c.createdAt });
+    messagesEl.appendChild(renderMessage({
+      id: c.id, author: c.author, bodyHTML: c.bodyHTML, body: c.body,
+      createdAt: c.createdAt, topLevel: true,
+    }));
     for (const r of c.replies.nodes) {
-      flat.push({ id: r.id, author: r.author, bodyHTML: r.bodyHTML, body: r.body, createdAt: r.createdAt, reply: true });
+      messagesEl.appendChild(renderMessage({
+        id: r.id, author: r.author, bodyHTML: r.bodyHTML, body: r.body,
+        createdAt: r.createdAt, reply: true,
+      }));
+    }
+    if (state.replyingToId === c.id) {
+      messagesEl.appendChild(renderReplyComposer(c.id));
     }
   }
-
-  const messagesEl = el("div", { class: "messages" },
-    ...flat.map(renderMessage)
-  );
 
   // Scroll to bottom after render
   setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 0);
@@ -337,13 +358,33 @@ function renderChatPanel() {
 }
 
 function renderMessage(m) {
-  const isBot = isBotAuthor(m.author?.login);
+  const isBot = isBotMessage(m);
   const isMe = m.author?.login === state.viewer?.login;
   const cls = "msg" + (isBot ? " bot" : "") + (isMe ? " me" : "") + (m.reply ? " reply" : "");
 
   // Use GitHub's pre-rendered bodyHTML when available (handles emoji, mentions,
   // referenced issues, etc. properly). Otherwise fall back to local markdown.
   const html = m.bodyHTML || renderMarkdown(m.body);
+
+  const headChildren = [
+    el("span", { class: "author" }, m.author?.login || "ghost"),
+    isBot && el("span", { class: "badge" }, "bot"),
+    m.isBody && el("span", { class: "badge" }, "op"),
+    el("span", { class: "stamp" }, new Date(m.createdAt).toLocaleString()),
+  ];
+
+  if (m.topLevel) {
+    headChildren.push(
+      el("button", {
+        class: "reply-link",
+        title: "Reply in thread",
+        onclick: () => {
+          state.replyingToId = state.replyingToId === m.id ? null : m.id;
+          render();
+        },
+      }, state.replyingToId === m.id ? "cancel" : "reply")
+    );
+  }
 
   return el("div", { class: cls },
     el("div", { class: "avatar" },
@@ -352,15 +393,69 @@ function renderMessage(m) {
         : null
     ),
     el("div", {},
-      el("div", { class: "head" },
-        el("span", { class: "author" }, m.author?.login || "ghost"),
-        isBot && el("span", { class: "badge" }, "bot"),
-        m.isBody && el("span", { class: "badge" }, "op"),
-        el("span", { class: "stamp" }, new Date(m.createdAt).toLocaleString())
-      ),
+      el("div", { class: "head" }, ...headChildren),
       el("div", { class: "body", html })
     )
   );
+}
+
+function renderReplyComposer(parentCommentId) {
+  const draft = state.replyDrafts.get(parentCommentId) || "";
+  const textarea = el("textarea", {
+    placeholder: "Reply in thread…  (Cmd/Ctrl+Enter to send, Esc to cancel)",
+    oninput: (e) => state.replyDrafts.set(parentCommentId, e.target.value),
+    onkeydown: (e) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        sendReply(parentCommentId, textarea.value);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        state.replyingToId = null;
+        state.replyDrafts.delete(parentCommentId);
+        render();
+      }
+    },
+  });
+  textarea.value = draft;
+  setTimeout(() => textarea.focus(), 0);
+
+  return el("div", { class: "reply-composer" },
+    textarea,
+    el("div", { class: "reply-composer-row" },
+      el("div", { class: "hint" },
+        el("kbd", {}, navigator.platform.includes("Mac") ? "⌘" : "Ctrl"),
+        " + ", el("kbd", {}, "↵"), " send · ",
+        el("kbd", {}, "Esc"), " cancel"
+      ),
+      el("div", { class: "reply-composer-actions" },
+        el("button", {
+          class: "ghost",
+          onclick: () => {
+            state.replyingToId = null;
+            state.replyDrafts.delete(parentCommentId);
+            render();
+          },
+        }, "cancel"),
+        el("button", {
+          class: "send",
+          onclick: () => sendReply(parentCommentId, textarea.value),
+        }, "send reply")
+      )
+    )
+  );
+}
+
+async function sendReply(parentCommentId, body) {
+  body = (body || "").trim();
+  if (!body || !state.activeDiscussion) return;
+  try {
+    await gh.addComment(state.token, state.activeDiscussion.id, body, parentCommentId);
+    state.replyDrafts.delete(parentCommentId);
+    state.replyingToId = null;
+    await refreshDiscussion();
+  } catch (e) {
+    alert("Failed to post reply: " + e.message);
+  }
 }
 
 // ---------- Boot/data ----------
@@ -475,13 +570,13 @@ function buildBotMessages(d) {
       `(opened by @${d.author?.login})\n\n${d.body}`,
   });
   for (const c of d.comments.nodes) {
-    const isBot = isBotAuthor(c.author?.login);
+    const isBot = isBotMessage(c);
     msgs.push({
       role: isBot ? "assistant" : "user",
       content: isBot ? c.body : `@${c.author?.login}: ${c.body}`,
     });
     for (const r of c.replies.nodes) {
-      const rIsBot = isBotAuthor(r.author?.login);
+      const rIsBot = isBotMessage(r);
       msgs.push({
         role: rIsBot ? "assistant" : "user",
         content: rIsBot ? r.body : `@${r.author?.login} (reply): ${r.body}`,
@@ -504,7 +599,17 @@ async function invokeBot(textarea) {
       messages
     );
     if (!text) throw new Error("Empty response from model.");
-    const tagged = `${text}\n\n<sub><i>posted by discuss/chat bot · ${state.selectedModel}</i></sub>`;
+    // Bot replies are posted via the signed-in user's OAuth token, so the
+    // comment shows up under their name and avatar. Lead with a visible
+    // header so readers (here and on github.com) can tell it apart from
+    // a real human reply. The HTML comment marker lets us detect bot
+    // messages programmatically for styling and role-mapping.
+    const author = state.viewer?.login || "the signed-in user";
+    const header =
+      `> **Bot reply** — model \`${state.selectedModel}\`  \n` +
+      `> _Generated by parley and posted via @${author}'s GitHub account._\n\n`;
+    const marker = `\n\n<!-- parley:bot model=${state.selectedModel} -->`;
+    const tagged = header + text + marker;
     await gh.addComment(state.token, state.activeDiscussion.id, tagged);
     await refreshDiscussion();
   } catch (e) {

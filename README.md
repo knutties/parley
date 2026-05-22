@@ -8,8 +8,13 @@ GitHub Pages.
 
 - Renders any GitHub Discussion thread as a chat conversation.
 - Lets you post replies via a chat composer (Cmd/Ctrl+Enter to send).
+- Supports **threaded replies** to individual comments — click `reply` on
+  any top-level comment to open an inline composer that posts as a reply
+  in that subthread.
 - Includes a bot you summon with `@bot` — it reads the thread context and
-  posts a reply through GitHub Models.
+  posts a reply through GitHub Models. The bot reply is prefixed with a
+  visible "Bot reply" header because, until a dedicated bot identity is
+  wired up, replies are posted via the signed-in user's OAuth token.
 - Discussions remain the canonical store. Every message is a real GitHub
   comment with a real permalink, searchable, indexed, and notifying
   subscribers like any other Discussion activity.
@@ -169,15 +174,21 @@ If the repo doesn't have Discussions on:
 
 ### 5. Deploy to GitHub Pages
 
-Two common patterns:
+The static site lives in `src/`. Two ways to publish it:
 
-- **Repo root:** copy `index.html`, `styles.css`, `config.js`, `app.js`,
-  `github.js`, `auth.js`, `markdown.js` into a repo and enable Pages on
-  the `main` branch.
-- **`/docs` folder:** drop the files into `docs/` and enable Pages on
-  `main → /docs`.
+- **From `src/` via GitHub Actions** (recommended for this layout):
+  set Pages source to **GitHub Actions** and use a workflow that uploads
+  the `src/` directory as the Pages artifact. The
+  `actions/upload-pages-artifact` action takes a `path: ./src` input.
+- **From a `gh-pages` branch**: build (or copy) `src/*` to the root of a
+  `gh-pages` branch and point Pages there.
 
-The URL where Pages serves the site must match the OAuth App's Homepage URL.
+If you prefer to skip Actions entirely, you can rename `src/` to `docs/`
+and point Pages at `main → /docs` — GitHub Pages serves `/docs` directly
+from any branch.
+
+Whichever route you pick, the URL Pages serves the site at must match the
+OAuth App's Homepage URL.
 
 ## Using it
 
@@ -193,10 +204,15 @@ The URL where Pages serves the site must match the OAuth App's Homepage URL.
 
 - Reads the full thread (discussion body + comments + nested replies)
 - Builds an OpenAI-style messages array, assigning roles by author
-  (bot author → `assistant`, everyone else → `user`)
+  (bot author → `assistant`, everyone else → `user`). Past parley bot
+  replies are also recognised via an embedded HTML-comment marker even
+  when they were posted under a human's GitHub identity.
 - Calls `https://models.github.ai/inference/chat/completions` with the
   selected model
-- Posts the response as a new comment on the discussion
+- Posts the response as a new comment on the discussion, prefixed with a
+  visible **Bot reply** header so it's distinguishable from a human reply
+  even though the comment appears under the signed-in user's name and
+  avatar.
 
 Inference is billed against the signed-in user's GitHub Models quota. The
 free tier covers casual use comfortably.
@@ -292,16 +308,18 @@ will simply all be `user` role in the prompt.
 ## Files
 
 ```
-index.html      — entry point
-styles.css      — single stylesheet
-config.js       — user-edited configuration
-app.js          — view orchestration + state
-github.js       — GraphQL + Models API calls
-auth.js         — OAuth device flow
-markdown.js     — minimal markdown renderer
+src/
+  index.html      — entry point
+  styles.css      — single stylesheet
+  config.js       — user-edited configuration
+  app.js          — view orchestration + state
+  github.js       — GraphQL + Models API calls
+  auth.js         — OAuth device flow
+  markdown.js     — minimal markdown renderer
 ```
 
-No build step. No `node_modules`. No bundler. Static files only.
+No build step. No `node_modules`. No bundler. Static files only — Pages
+just serves the contents of `src/`.
 
 ## License
 
