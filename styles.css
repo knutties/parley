@@ -122,21 +122,43 @@ header.topbar {
 }
 
 .brand {
-  font-family: var(--mono);
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--serif);
+  font-size: 18px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.005em;
   color: var(--fg);
 }
-.brand .slash { color: var(--accent); }
+.brand .brand-name { line-height: 1; }
 .brand .tag {
   color: var(--fg-faint);
+  font-family: var(--mono);
   font-weight: 400;
-  margin-left: 12px;
+  margin-left: 6px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
+
+/* Shared brand mark — flex wrapper around the inline SVG. */
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.brand-mark svg { width: 100%; height: 100%; display: block; }
+
+/* Auth/card wordmark heading variant. */
+.card h1.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.card h1.wordmark .brand-mark { color: var(--accent); }
 
 .repo-crumbs {
   font-family: var(--mono);
@@ -602,7 +624,6 @@ section.chat {
   letter-spacing: -0.015em;
   margin-bottom: 8px;
 }
-.card h1 .slash { color: var(--accent); }
 .card .lede {
   font-family: var(--serif);
   font-size: 15px;

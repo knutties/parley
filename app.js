@@ -1,4 +1,4 @@
-// app.js — main view + state for discuss/chat
+// app.js — main view + state for parley
 
 import * as gh from "./github.js";
 import * as auth from "./auth.js";
@@ -61,6 +61,22 @@ function el(tag, attrs = {}, ...children) {
   return e;
 }
 
+// Inline brand mark: two overlapping circles standing for two parties
+// meeting on shared ground. Uses currentColor so callers can theme it
+// (the topbar sets color: var(--accent) on the wrapper).
+function parleyMark(size = 20) {
+  const wrap = document.createElement("span");
+  wrap.className = "brand-mark";
+  wrap.style.width = `${size}px`;
+  wrap.style.height = `${size}px`;
+  wrap.innerHTML =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" aria-hidden="true">' +
+      '<circle cx="12" cy="16" r="8" stroke="currentColor" stroke-width="2.5"/>' +
+      '<circle cx="20" cy="16" r="8" stroke="currentColor" stroke-width="2.5"/>' +
+    '</svg>';
+  return wrap;
+}
+
 function timeAgo(iso) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return `${Math.floor(diff)}s`;
@@ -100,7 +116,7 @@ function renderAuth() {
     $app.appendChild(
       el("div", { class: "center-stage" },
         el("div", { class: "card" },
-          el("h1", {}, "discuss", el("span", { class: "slash" }, "/"), "chat"),
+          el("h1", { class: "wordmark" }, parleyMark(28), "parley"),
           el("p", { class: "lede" }, "Configuration needed."),
           el("div", { class: "banner error" },
             "Edit config.js and set clientId to your GitHub OAuth App's Client ID. " +
@@ -113,7 +129,7 @@ function renderAuth() {
   }
 
   const card = el("div", { class: "card" },
-    el("h1", {}, "discuss", el("span", { class: "slash" }, "/"), "chat"),
+    el("h1", { class: "wordmark" }, parleyMark(28), "parley"),
     el("p", { class: "lede" },
       "A chat interface over GitHub Discussions. Sign in with GitHub to begin."
     ),
@@ -232,7 +248,8 @@ function renderMain() {
   $app.appendChild(
     el("header", { class: "topbar" },
       el("div", { class: "brand" },
-        "discuss", el("span", { class: "slash" }, "/"), "chat",
+        parleyMark(18),
+        el("span", { class: "brand-name" }, "parley"),
         el("span", { class: "tag" }, "GitHub Models")
       ),
       el("div", { class: "repo-crumbs" },
@@ -368,7 +385,7 @@ function renderChatPanel() {
   setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 0);
 
   const textarea = el("textarea", {
-    placeholder: `Reply to #${d.number}…  ·  /bot to summon  ·  Cmd/Ctrl+Enter`,
+    placeholder: `Reply to #${d.number}…  ·  /parley-bot to summon  ·  Cmd/Ctrl+Enter`,
     onkeydown: (e) => {
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -412,15 +429,15 @@ function renderChatPanel() {
           el("div", { class: "composer-actions" },
             modelSelect,
             el("button", {
-              class: "bot",
-              title: "Summon the bot to reply (same as typing /bot)",
-              disabled: state.postingBot ? "disabled" : null,
-              onclick: () => invokeBot(textarea),
-            }, state.postingBot ? "…" : "/bot"),
-            el("button", {
               class: "send",
               onclick: () => handleSend(textarea),
-            }, "send")
+            }, "send"),
+            el("button", {
+              class: "bot",
+              title: "Summon parley-bot to reply (same as typing /parley-bot)",
+              disabled: state.postingBot ? "disabled" : null,
+              onclick: () => invokeBot(textarea),
+            }, state.postingBot ? "…" : "/parley-bot")
           )
         )
       )
@@ -610,9 +627,10 @@ async function handleSend(textarea) {
   const raw = textarea.value.trim();
   if (!raw || !state.activeDiscussion) return;
 
-  // /bot slash command: either bare "/bot" (summon without posting), or
-  // "/bot <something>" (post <something> as a user comment, then summon).
-  const slashMatch = raw.match(/^\/bot\b\s*([\s\S]*)$/i);
+  // /parley-bot slash command: either bare "/parley-bot" (summon without
+  // posting), or "/parley-bot <something>" (post <something> as a user
+  // comment, then summon).
+  const slashMatch = raw.match(/^\/parley-bot\b\s*([\s\S]*)$/i);
   if (slashMatch) {
     const remainder = slashMatch[1].trim();
     textarea.value = "";

@@ -1,4 +1,4 @@
-// discuss/chat configuration
+// parley configuration
 //
 // Edit this file with your OAuth App's Client ID and (optionally) a default
 // repo. The Client ID is NOT a secret — it's safe to commit.
@@ -51,8 +51,9 @@ window.DISCUSS_CHAT_CONFIG = {
 
   // Trigger phrase that invokes the bot. Anything mentioning this string
   // (case-insensitive) in a posted comment will queue a bot response.
-  // Use "@bot" or whatever feels natural in your community.
-  botTrigger: "@test-chat-bot",
+  // Kept in sync with the parley-bot branding and the /parley-bot slash
+  // command in the composer.
+  botTrigger: "@parley-bot",
 
   corsProxy: "https://my-first-worker.knutties.workers.dev/?url=",
 

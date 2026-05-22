@@ -11,11 +11,12 @@ GitHub Pages.
 - Supports **threaded replies** to individual comments — click `reply` on
   any top-level comment to open an inline composer that posts as a reply
   in that subthread.
-- Includes a bot you summon by typing `/bot` (or by clicking the small
-  `/bot` button in the composer). It reads the thread context and posts
-  a reply through GitHub Models. The reply is prefixed with a one-line
-  **parley-bot** callout because, until a dedicated bot identity is
-  wired up, replies are posted via the signed-in user's OAuth token.
+- Includes a bot you summon by typing `/parley-bot` (or by clicking the
+  small `/parley-bot` button in the composer). It reads the thread
+  context and posts a reply through GitHub Models. The reply is prefixed
+  with a one-line **parley-bot** callout because, until a dedicated bot
+  identity is wired up, replies are posted via the signed-in user's
+  OAuth token.
 - Shows the participants of the current discussion in a side rail with
   avatars and per-author message counts.
 - Picks a theme — `Terracotta dark` (default), `Slack light`, or
@@ -197,8 +198,8 @@ The URL where Pages serves the site must match the OAuth App's Homepage URL.
 4. Discussions load in the sidebar
 5. Click any discussion to open it as chat
 6. Cmd/Ctrl+Enter to send
-7. Type `/bot` (alone, or followed by a question) to summon the LLM, or
-   click the small `/bot` button next to the model picker
+7. Type `/parley-bot` (alone, or followed by a question) to summon the
+   LLM, or click the small `/parley-bot` button next to the model picker
 
 ## How the bot works
 
