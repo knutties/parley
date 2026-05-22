@@ -11,10 +11,16 @@ GitHub Pages.
 - Supports **threaded replies** to individual comments — click `reply` on
   any top-level comment to open an inline composer that posts as a reply
   in that subthread.
-- Includes a bot you summon with `@bot` — it reads the thread context and
-  posts a reply through GitHub Models. The bot reply is prefixed with a
-  visible "Bot reply" header because, until a dedicated bot identity is
+- Includes a bot you summon by typing `/bot` (or by clicking the small
+  `/bot` button in the composer). It reads the thread context and posts
+  a reply through GitHub Models. The reply is prefixed with a one-line
+  **parley-bot** callout because, until a dedicated bot identity is
   wired up, replies are posted via the signed-in user's OAuth token.
+- Shows the participants of the current discussion in a side rail with
+  avatars and per-author message counts.
+- Picks a theme — `Terracotta dark` (default), `Slack light`, or
+  `Discord dark` — from the topbar. Choice is persisted in
+  `localStorage`.
 - Discussions remain the canonical store. Every message is a real GitHub
   comment with a real permalink, searchable, indexed, and notifying
   subscribers like any other Discussion activity.
@@ -191,21 +197,22 @@ The URL where Pages serves the site must match the OAuth App's Homepage URL.
 4. Discussions load in the sidebar
 5. Click any discussion to open it as chat
 6. Cmd/Ctrl+Enter to send
-7. Mention `@bot` in a message, or click **ask bot**, to get an LLM reply
+7. Type `/bot` (alone, or followed by a question) to summon the LLM, or
+   click the small `/bot` button next to the model picker
 
 ## How the bot works
 
 - Reads the full thread (discussion body + comments + nested replies)
 - Builds an OpenAI-style messages array, assigning roles by author
-  (bot author → `assistant`, everyone else → `user`). Past parley bot
+  (bot author → `assistant`, everyone else → `user`). Past parley-bot
   replies are also recognised via an embedded HTML-comment marker even
   when they were posted under a human's GitHub identity.
 - Calls `https://models.github.ai/inference/chat/completions` with the
   selected model
 - Posts the response as a new comment on the discussion, prefixed with a
-  visible **Bot reply** header so it's distinguishable from a human reply
-  even though the comment appears under the signed-in user's name and
-  avatar.
+  one-line `**parley-bot** · model · via @user` callout so it's
+  distinguishable from a human reply even though the comment appears
+  under the signed-in user's name and avatar.
 
 Inference is billed against the signed-in user's GitHub Models quota. The
 free tier covers casual use comfortably.
