@@ -90,10 +90,15 @@ const ALLOWED_ORIGINS = [
   // "https://parley.example.com",         // add a custom domain here later
 ];
 
-const ALLOWED_TARGETS = [
-  "https://github.com/login/device/code",
-  "https://github.com/login/oauth/access_token",
-];
+// Per-target rules. Each target declares the HTTP methods the proxy will
+// forward and whether the request body must carry an allowed client_id
+// (only the device-flow endpoints need that — the catalog endpoint is a
+// plain authenticated GET).
+const ALLOWED_TARGETS = {
+  "https://github.com/login/device/code":         { methods: ["POST"], requireClientId: true  },
+  "https://github.com/login/oauth/access_token":  { methods: ["POST"], requireClientId: true  },
+  "https://models.github.ai/catalog/models":      { methods: ["GET"],  requireClientId: false },
+};
 
 const ALLOWED_CLIENT_IDS = [
   "Iv1.YOUR_OAUTH_CLIENT_ID",             // from config.js
@@ -106,9 +111,6 @@ export default {
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(req) });
     }
-    if (req.method !== "POST") {
-      return new Response("method not allowed", { status: 405 });
-    }
 
     const origin = req.headers.get("Origin") || "";
     if (!ALLOWED_ORIGINS.includes(origin)) {
@@ -116,31 +118,45 @@ export default {
     }
 
     const target = new URL(req.url).searchParams.get("url");
-    if (!ALLOWED_TARGETS.includes(target)) {
+    const rule = ALLOWED_TARGETS[target];
+    if (!rule) {
       return new Response("forbidden target", { status: 403 });
     }
-
-    const body = await req.text();
-    if (body.length > MAX_BODY_BYTES) {
-      return new Response("body too large", { status: 413 });
+    if (!rule.methods.includes(req.method)) {
+      return new Response("method not allowed for target", { status: 405 });
     }
 
-    try {
-      const parsed = JSON.parse(body);
-      if (!ALLOWED_CLIENT_IDS.includes(parsed.client_id)) {
-        return new Response("forbidden client", { status: 403 });
+    let body = null;
+    if (req.method === "POST") {
+      body = await req.text();
+      if (body.length > MAX_BODY_BYTES) {
+        return new Response("body too large", { status: 413 });
       }
-    } catch {
-      return new Response("invalid body", { status: 400 });
+      if (rule.requireClientId) {
+        try {
+          const parsed = JSON.parse(body);
+          if (!ALLOWED_CLIENT_IDS.includes(parsed.client_id)) {
+            return new Response("forbidden client", { status: 403 });
+          }
+        } catch {
+          return new Response("invalid body", { status: 400 });
+        }
+      }
     }
+
+    // Forward the Authorization header for endpoints that need it (the
+    // catalog endpoint requires it; the device-flow endpoints don't).
+    const fwdHeaders = {
+      "Accept": "application/json",
+      "User-Agent": "parley-auth-proxy",
+    };
+    if (req.method === "POST") fwdHeaders["Content-Type"] = "application/json";
+    const incomingAuth = req.headers.get("Authorization");
+    if (incomingAuth) fwdHeaders["Authorization"] = incomingAuth;
 
     const ghResp = await fetch(target, {
-      method: "POST",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "User-Agent": "parley-auth-proxy",
-      },
+      method: req.method,
+      headers: fwdHeaders,
       body,
     });
 
@@ -155,12 +171,19 @@ function corsHeaders(req) {
   const origin = req.headers.get("Origin") || "";
   return {
     "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin) ? origin : "null",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Accept",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Accept, Authorization",
     "Access-Control-Max-Age": "86400",
   };
 }
 ```
+
+> **Updating an existing Worker?** Replace the body of your `worker.js`
+> with the snippet above (or add `"https://models.github.ai/catalog/models"`
+> to your `ALLOWED_TARGETS` and let `GET` through plus an `Authorization`
+> header). Until you redeploy, parley will silently fall back to the
+> static `config.models` list — the live catalog fetch will be blocked
+> by your existing proxy with a `403 forbidden target`.
 
 Then in `config.js`:
 
@@ -222,9 +245,12 @@ free tier covers casual use comfortably.
 
 By default the model dropdown is populated from the live GitHub Models
 catalog at `https://models.github.ai/catalog/models`, fetched once at
-boot using the signed-in user's token. The static `config.models` array
-is used as a fallback when the fetch fails (offline, rate-limited,
-unauthenticated, etc.) and to seed the picker on first paint.
+boot using the signed-in user's token and relayed through the same
+Cloudflare Worker that fronts the OAuth device-flow endpoints (the
+catalog endpoint does not return CORS headers, so a direct browser
+fetch gets blocked). The static `config.models` array is used as a
+fallback when the fetch fails (offline, rate-limited, unauthenticated,
+proxy not updated yet, etc.) and to seed the picker on first paint.
 
 Use `config.modelFilter` to scope the live catalog to a short curated
 list — it's a case-insensitive substring allowlist applied to each

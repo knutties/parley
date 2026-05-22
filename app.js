@@ -69,7 +69,7 @@ function labelFor(m) {
 async function loadModels() {
   if (!cfg.useLiveModels || !state.token) return;
   try {
-    const catalog = await gh.listModels(state.token);
+    const catalog = await gh.listModels(state.token, cfg.corsProxy || null);
     const picked = catalog
       .filter((m) => m && m.id)
       .filter(isChatModel)
