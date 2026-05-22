@@ -23,6 +23,14 @@ window.PARLEY_CONFIG = {
     name: "parley",
   },
 
+  // One-line tagline shown under the brand in the topbar and on the
+  // auth/repo-picker cards. Keep it short — it sits next to the wordmark.
+  tagline: "github discussions as a group chat",
+
+  // Where the brand wordmark links to. Defaults to the canonical parley
+  // repo; forks should point this at their own source.
+  sourceUrl: "https://github.com/knutties/parley",
+
   // GitHub Models inference endpoint (rarely needs changing).
   modelsEndpoint: "https://models.github.ai/inference/chat/completions",
 
