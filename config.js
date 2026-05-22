@@ -29,13 +29,33 @@ window.PARLEY_CONFIG = {
   // Default model. Users can override in the UI.
   defaultModel: "openai/gpt-4o",
 
-  // Available models in the picker. Trim/extend to taste.
+  // Fallback model list used if the live catalog fetch fails (offline,
+  // 401, rate-limited, etc.). Also used to seed the picker on first paint
+  // before the catalog has resolved. Trim/extend to taste.
   models: [
     { id: "openai/gpt-4o", label: "GPT-4o" },
     { id: "openai/gpt-4o-mini", label: "GPT-4o mini" },
     { id: "meta/Llama-3.3-70B-Instruct", label: "Llama 3.3 70B" },
     { id: "mistral-ai/Mistral-Large-2411", label: "Mistral Large" },
     { id: "deepseek/DeepSeek-V3", label: "DeepSeek V3" },
+  ],
+
+  // Live-catalog discovery. When true, parley fetches
+  // https://models.github.ai/catalog/models on boot and uses the result
+  // to populate the picker — so the dropdown stays in sync with whatever
+  // GitHub Models currently exposes. The fallback `models` list above is
+  // used if the fetch fails.
+  useLiveModels: true,
+
+  // Optional case-insensitive substring allowlist applied to the live
+  // catalog's model `id` field. Empty array means "include everything
+  // that looks like a chat-completion model". Useful to keep the picker
+  // short — e.g. ["openai/gpt", "meta/llama", "mistral", "deepseek"].
+  modelFilter: [
+    "openai/gpt",
+    "meta/llama",
+    "mistral-ai/mistral",
+    "deepseek/deepseek",
   ],
 
   // The bot's "persona" prompt. Edit to taste.
