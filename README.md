@@ -7,6 +7,8 @@ GitHub Pages.
 ## What it does
 
 - Renders any GitHub Discussion thread as a chat conversation.
+- Loads Discussions and long comment threads with GitHub cursor pagination,
+  so popular repos are not limited to the first page of activity.
 - Lets you post replies via a chat composer (Cmd/Ctrl+Enter to send).
 - Supports **threaded replies** to individual comments — click `reply` on
   any top-level comment to open an inline composer that posts as a reply
@@ -72,7 +74,22 @@ window.PARLEY_CONFIG = {
 };
 ```
 
-### 3. Deploy a CORS proxy (Cloudflare Worker)
+### 3. Run locally
+
+Use the included dev server rather than `python3 -m http.server`. It serves
+the static app and provides a restricted same-origin proxy for the GitHub
+OAuth endpoints that browsers cannot call directly.
+
+```sh
+node dev-server.js
+```
+
+Then open `http://localhost:4173`.
+
+`config.js` uses `localCorsProxy: "/proxy?url="` on localhost, so local
+sign-in works without changing your deployed Worker allowlist.
+
+### 4. Deploy a CORS proxy (Cloudflare Worker)
 
 GitHub's device-flow endpoints don't send CORS headers, so a pure-static
 page can't call them directly. You need a tiny relay. Cloudflare Workers'
@@ -197,12 +214,12 @@ corsProxy: "https://your-worker.workers.dev/?url=",
 > See the "Hardening" section below for the threat model and what each
 > layer defends against.
 
-### 4. Enable Discussions on the target repo
+### 5. Enable Discussions on the target repo
 
 If the repo doesn't have Discussions on:
 **Settings → General → Features → Discussions ✅**
 
-### 5. Deploy to GitHub Pages
+### 6. Deploy to GitHub Pages
 
 All the static files live at the repo root, so Pages can serve them
 directly with no workflow. Two common patterns:
@@ -241,6 +258,8 @@ back/forward buttons all do the right thing.
 ## How the bot works
 
 - Reads the full thread (discussion body + comments + nested replies)
+  using cursor pagination; the prompt includes whether the loaded context is
+  complete or partial.
 - Builds an OpenAI-style messages array, assigning roles by author
   (bot author → `assistant`, everyone else → `user`). Past parley-bot
   replies are also recognised via an embedded HTML-comment marker even

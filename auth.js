@@ -1,9 +1,9 @@
 // auth.js — GitHub OAuth Device Flow (no backend needed)
 //
-// Note: GitHub's device flow endpoints don't send CORS headers, so we route
-// through a CORS proxy for the browser. We use the cors.lol public proxy by
-// default — for production you should host your own (e.g. a Cloudflare
-// Worker that just forwards to github.com/login/device/*).
+// Note: GitHub's device flow endpoints don't send CORS headers, so browser
+// builds route through a small proxy. In local development, dev-server.js
+// exposes a same-origin /proxy endpoint. Deployed builds should use a hosted
+// Worker configured in config.js.
 //
 // Alternative: many users self-host this app via "github.io" anyway, and a
 // 20-line Cloudflare Worker as the CORS proxy is the cleanest setup.
@@ -14,9 +14,18 @@ const SCOPES = "repo";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
+function isLocalOrigin() {
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
+export function getCorsProxy() {
+  const cfg = window.PARLEY_CONFIG || {};
+  if (isLocalOrigin() && cfg.localCorsProxy) return cfg.localCorsProxy;
+  return cfg.corsProxy || DEFAULT_PROXY;
+}
+
 function proxied(url) {
-  const proxy = window.PARLEY_CONFIG.corsProxy || DEFAULT_PROXY;
-  return proxy + encodeURIComponent(url);
+  return getCorsProxy() + encodeURIComponent(url);
 }
 
 export async function startDeviceFlow(clientId) {
