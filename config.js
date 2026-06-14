@@ -83,6 +83,10 @@ window.PARLEY_CONFIG = {
   // command in the composer.
   botTrigger: "@parley-bot",
 
+  // Local development uses dev-server.js, which exposes this same-origin
+  // proxy route. For production, replace corsProxy with your hosted Worker.
+  localCorsProxy: "/proxy?url=",
+
   corsProxy: "https://my-first-worker.knutties.workers.dev/?url=",
 
 };

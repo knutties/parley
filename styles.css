@@ -276,6 +276,39 @@ aside.thread-list {
 }
 .thread-list-header button:hover { color: var(--fg); }
 
+.thread-list-footer {
+  border-top: 1px solid var(--rule);
+  padding: 14px 18px 18px;
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.thread-list-footer .spinner { margin-right: 6px; vertical-align: -1px; }
+.thread-list-footer button.load-more {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 8px 10px;
+  text-transform: uppercase;
+}
+.thread-list-footer button.load-more:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.thread-list-footer button.load-more:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .thread-item {
   padding: 12px 18px;
   border-top: 1px solid var(--rule);
@@ -337,6 +370,12 @@ section.chat {
 }
 .chat-header .sub a { color: var(--accent); text-decoration: none; }
 .chat-header .sub a:hover { text-decoration: underline; }
+.thread-completeness {
+  color: var(--ok);
+}
+.thread-completeness.partial {
+  color: var(--danger);
+}
 
 .messages {
   flex: 1;

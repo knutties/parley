@@ -13,6 +13,10 @@ const state = {
   repo: null,           // { owner, name }
   repoId: null,
   threads: [],
+  threadsPageInfo: null,
+  threadsTotalCount: 0,
+  loadingThreads: false,
+  loadingMoreThreads: false,
   activeNumber: null,
   activeDiscussion: null,
   pollTimer: null,
@@ -69,7 +73,7 @@ function labelFor(m) {
 async function loadModels() {
   if (!cfg.useLiveModels || !state.token) return;
   try {
-    const catalog = await gh.listModels(state.token, cfg.corsProxy || null);
+    const catalog = await gh.listModels(state.token, auth.getCorsProxy());
     const picked = catalog
       .filter((m) => m && m.id)
       .filter(isChatModel)
@@ -165,6 +169,8 @@ function render() {
 
 // ---------- Auth view ----------
 function renderAuth() {
+  $app.innerHTML = "";
+
   if (cfg.clientId === "YOUR_OAUTH_CLIENT_ID_HERE" || !cfg.clientId) {
     $app.appendChild(
       el("div", { class: "center-stage" },
@@ -291,7 +297,8 @@ function renderMain() {
       el("span", {}, "discussions"),
       el("button", { onclick: refreshThreads }, "↻ refresh")
     ),
-    ...state.threads.map(renderThreadItem)
+    ...state.threads.map(renderThreadItem),
+    renderThreadListFooter()
   );
 
   const chatPanel = state.activeDiscussion
@@ -361,6 +368,34 @@ function renderMain() {
   const layoutClass = "layout" + (state.activeDiscussion ? " with-participants" : "");
   const participants = state.activeDiscussion ? renderParticipants(state.activeDiscussion) : null;
   $app.appendChild(el("main", { class: layoutClass }, sidebar, chatPanel, participants));
+}
+
+function renderThreadListFooter() {
+  if (state.loadingThreads && state.threads.length === 0) {
+    return el("div", { class: "thread-list-footer" },
+      el("span", { class: "spinner" }),
+      " loading discussions"
+    );
+  }
+
+  if (state.threadsPageInfo?.hasNextPage) {
+    return el("div", { class: "thread-list-footer" },
+      el("button", {
+        class: "load-more",
+        disabled: state.loadingMoreThreads ? "disabled" : null,
+        onclick: loadMoreThreads,
+      }, state.loadingMoreThreads ? "loading..." : "load more")
+    );
+  }
+
+  if (state.threads.length > 0) {
+    const total = state.threadsTotalCount || state.threads.length;
+    return el("div", { class: "thread-list-footer" },
+      `${state.threads.length} of ${total} discussions`
+    );
+  }
+
+  return null;
 }
 
 function renderParticipants(d) {
@@ -484,7 +519,8 @@ function renderChatPanel() {
         el("span", {}, `#${d.number}`),
         d.category && el("span", {}, `${d.category.emoji || ""} ${d.category.name}`),
         el("span", {}, `opened by ${d.author?.login || "anon"}`),
-        el("span", {}, timeAgo(d.createdAt) + " ago")
+        el("span", {}, timeAgo(d.createdAt) + " ago"),
+        renderDiscussionCompleteness(d)
       )
     ),
     messagesEl,
@@ -512,6 +548,25 @@ function renderChatPanel() {
         )
       )
     )
+  );
+}
+
+function renderDiscussionCompleteness(d) {
+  const pageInfo = d.parleyPageInfo;
+  if (!pageInfo) return null;
+  const comments = pageInfo.comments.loadedCount;
+  const replies = pageInfo.replies.loadedCount;
+  const totalComments = pageInfo.comments.totalCount;
+  const totalReplies = pageInfo.replies.totalCount;
+  const complete = pageInfo.complete;
+  return el("span", {
+    class: "thread-completeness" + (complete ? "" : " partial"),
+    title: complete
+      ? "The complete discussion is loaded."
+      : "This discussion is still partial; bot context will include that warning.",
+  }, complete
+    ? `complete · ${comments}/${totalComments} comments · ${replies}/${totalReplies} replies`
+    : `partial · ${comments}/${totalComments} comments · ${replies}/${totalReplies} replies`
   );
 }
 
@@ -642,6 +697,10 @@ function resetRepoScopedState() {
   state.activeDiscussion = null;
   state.activeNumber = null;
   state.threads = [];
+  state.threadsPageInfo = null;
+  state.threadsTotalCount = 0;
+  state.loadingThreads = false;
+  state.loadingMoreThreads = false;
   state.repoId = null;
   state.seenCommentIds = new Set();
   state.replyingToId = null;
@@ -658,11 +717,17 @@ async function bootRepo() {
 
 async function refreshThreads() {
   const { owner, name } = state.repo;
+  state.loadingThreads = true;
+  state.loadingMoreThreads = false;
+  render();
   try {
-    const { repoId, discussions } = await gh.listDiscussions(state.token, owner, name, 30);
+    const { repoId, discussions, pageInfo, totalCount } =
+      await gh.listDiscussions(state.token, owner, name, 30);
     if (!isCurrentRepo(owner, name)) return; // user navigated away
     state.repoId = repoId;
     state.threads = discussions;
+    state.threadsPageInfo = pageInfo;
+    state.threadsTotalCount = totalCount;
     render();
   } catch (e) {
     console.error(e);
@@ -674,6 +739,51 @@ async function refreshThreads() {
     }
     if (!isCurrentRepo(owner, name)) return;
     throw e;
+  } finally {
+    if (isCurrentRepo(owner, name)) {
+      state.loadingThreads = false;
+      state.loadingMoreThreads = false;
+      render();
+    }
+  }
+}
+
+async function loadMoreThreads() {
+  if (!state.repo || !state.threadsPageInfo?.hasNextPage || state.loadingMoreThreads) return;
+  const { owner, name } = state.repo;
+  state.loadingMoreThreads = true;
+  render();
+  try {
+    const { repoId, discussions, pageInfo, totalCount } =
+      await gh.listDiscussions(
+        state.token,
+        owner,
+        name,
+        30,
+        state.threadsPageInfo.endCursor
+      );
+    if (!isCurrentRepo(owner, name)) return;
+    state.repoId = repoId;
+    const seen = new Set(state.threads.map((t) => t.id));
+    state.threads = state.threads.concat(discussions.filter((t) => !seen.has(t.id)));
+    state.threadsPageInfo = pageInfo;
+    state.threadsTotalCount = totalCount;
+    render();
+  } catch (e) {
+    console.error(e);
+    if (String(e.message).includes("Bad credentials")) {
+      auth.clearToken();
+      state.token = null;
+      render();
+      return;
+    }
+    if (!isCurrentRepo(owner, name)) return;
+    alert("Failed to load more discussions: " + e.message);
+  } finally {
+    if (isCurrentRepo(owner, name)) {
+      state.loadingMoreThreads = false;
+      render();
+    }
   }
 }
 
@@ -784,11 +894,18 @@ async function refreshDiscussion() {
 function buildBotMessages(d) {
   const sys = { role: "system", content: cfg.botSystemPrompt };
   const msgs = [sys];
+  const pageInfo = d.parleyPageInfo;
+  const completeness = pageInfo
+    ? pageInfo.complete
+      ? "Thread context status: complete."
+      : `Thread context status: partial. Loaded ${pageInfo.comments.loadedCount}/${pageInfo.comments.totalCount} top-level comments and ${pageInfo.replies.loadedCount}/${pageInfo.replies.totalCount} nested replies. Mention this limitation if it affects your answer.`
+    : "Thread context status: unknown; pagination metadata was unavailable.";
   msgs.push({
     role: "user",
     content:
       `[Discussion #${d.number}: ${d.title}]\n` +
-      `(opened by @${d.author?.login})\n\n${d.body}`,
+      `(opened by @${d.author?.login})\n` +
+      `${completeness}\n\n${d.body}`,
   });
   for (const c of d.comments.nodes) {
     const isBot = isBotMessage(c);
